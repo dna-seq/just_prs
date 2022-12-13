@@ -1,0 +1,31 @@
+title: Prs postagregator
+version: 0.1.0
+data_version: 0.1.0
+requires_opencravat: '>=1.8.1'
+type: postaggregator
+name: just_prs
+level: variant
+input_level: variant
+description: Pologenic Risk Score (PRS) postagregator for longevity report.
+requires:
+- dbsnp
+- vcfinfo
+tags:
+- prs
+- longevity
+output_columns:
+- name: col1
+  title: clo1
+  type: string
+  width: 1
+  filterable: false
+  hidden: true
+  desc: dummy column
+developer:
+  name: "Alex Karmazin"
+  organization: "Just-DNA_seq"
+  email: "karmazzinalex@gmail.com"
+  website: "https://github.com/dna-seq/opencravat-longevity"
+  citation: ""
+release_note:
+  0.1.0: initial commit
