@@ -1,5 +1,5 @@
 # just_prs
-Polygenic risk score (PRS) postagregator for longevity report in oakvar
+Polygenic risk score (PRS) postagregator for longevity report in oakvar. It is a part of [Oakvar-Longevity](https://github.com/dna-seq/oakvar-longevity) module.
 
 
 # Installation
