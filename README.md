@@ -5,11 +5,11 @@ Polygenic risk score (PRS) postagregator for longevity report in oakvar
 # Installation
 ## Installation through Oakvar
 
-- From Oakvar store:
+From Oakvar store:
 ```bash
 ov module install just_prs
 ```
-- From direct link on GitHub:
+From direct link on GitHub:
 ```bash
 ov module install https://github.com/dna-seq/just_prs
 ```
