@@ -17,3 +17,5 @@ ov module install https://github.com/dna-seq/just_prs
 ## Manual installation
 
 Create a folder with the name "just_prs" in "postaggregators" folder of Oakvar and put inside all the files from this git repository.
+
+You can join our [discord](https://discord.gg/5WU6aSANXy) if you want to discuss the project or if you encountered any issue.
