@@ -10,6 +10,12 @@ description: Pologenic Risk Score (PRS) postagregator for longevity report.
 requires:
 - dbsnp
 - vcfinfo
+input_columns:
+  - dbsnp__rsid
+  - base__alt_base
+  - base__ref_base
+  - base__chrom
+  - vcfinfo__zygosity
 tags:
 - prs
 - longevity
