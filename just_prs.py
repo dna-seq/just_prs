@@ -10,10 +10,10 @@ TITLE = "title"
 INVERS = "invers"
 
 class CravatPostAggregator (BasePostAggregator):
-    prs = {}
-    prs_names = []
+    prs:dict = {}
+    prs_names:list = []
     # prs5_rsids = []
-    sql_get_prs = """SELECT name, title, total, invers FROM prs;"""
+    sql_get_prs:str = """SELECT name, title, total, invers FROM prs;"""
 
 
     def check(self):
@@ -21,17 +21,17 @@ class CravatPostAggregator (BasePostAggregator):
 
 
     def setup (self):
-        sql_file = str(Path(__file__).parent) + "/data/prs.sqlite"
+        sql_file:str = str(Path(__file__).parent) + "/data/prs.sqlite"
         if Path(sql_file).exists():
-            self.prsconn = sqlite3.connect(sql_file)
-            self.prscursor = self.prsconn.cursor()
+            self.prsconn:sqlite3.Connection = sqlite3.connect(sql_file)
+            self.prscursor:sqlite3.Cursor = self.prsconn.cursor()
             self.prscursor.execute(self.sql_get_prs)
-            rows = self.prscursor.fetchall()
+            rows:tuple = self.prscursor.fetchall()
             for row in rows:
                 self.prs_names.append(row[0])
                 self.prs[row[0]] = {SUM: 0, COUNT: 0, TITLE: row[1], TOTAL: int(row[2]), INVERS: int(row[3])}
 
-        sql_create = """ CREATE TABLE IF NOT EXISTS prs (
+        sql_create:str = """ CREATE TABLE IF NOT EXISTS prs (
                     id integer NOT NULL PRIMARY KEY,
                     name text,
                     sum float,
@@ -43,9 +43,9 @@ class CravatPostAggregator (BasePostAggregator):
                     fraction float,
                     invers text
                     )"""
-        self.result_path = Path(self.output_dir, self.run_name + "_longevity.sqlite")
-        self.longevity_conn = sqlite3.connect(self.result_path)
-        self.longevity_cursor = self.longevity_conn.cursor()
+        self.result_path:Path = Path(self.output_dir, self.run_name + "_longevity.sqlite")
+        self.longevity_conn:sqlite3.Connection = sqlite3.connect(self.result_path)
+        self.longevity_cursor:sqlite3.Cursor = self.longevity_conn.cursor()
         self.longevity_cursor.execute(sql_create)
         self.longevity_conn.commit()
         self.longevity_cursor.execute("DELETE FROM prs;")
@@ -64,30 +64,30 @@ class CravatPostAggregator (BasePostAggregator):
 
         
     def annotate (self, input_data):
-        rsid = str(input_data['dbsnp__rsid'])
+        rsid:str = str(input_data['dbsnp__rsid'])
         if rsid == '':
             return
 
         if not rsid.startswith("rs"):
             rsid = 'rs' + rsid
-        alt = input_data['base__alt_base']
-        ref = input_data['base__ref_base']
-        chrom = input_data['base__chrom']
+        alt:str = input_data['base__alt_base']
+        ref:str = input_data['base__ref_base']
+        chrom:str = input_data['base__chrom']
 
-        query = f"SELECT prs.name, weights.weight, position.effect_allele FROM position, prs, weights WHERE chrom = '{chrom}'" \
+        query:str = f"SELECT prs.name, weights.weight, position.effect_allele FROM position, prs, weights WHERE chrom = '{chrom}'" \
                 f" AND rsid = '{rsid}' AND weights.posid = position.id AND weights.prsid = prs.id"
 
         self.prscursor.execute(query)
-        rows = self.prscursor.fetchall()
+        rows:tuple = self.prscursor.fetchall()
 
         if len(rows) == 0:
             return
 
-        zygot = input_data['vcfinfo__zygosity']
+        zygot:str = input_data['vcfinfo__zygosity']
         for name, weight, allele in rows:
             if not (allele == alt or (allele == ref and zygot == 'het')):
                 continue
-            weight = float(weight)
+            weight:float = float(weight)
             if allele == alt and zygot == 'hom':
                 weight = 2 * weight
 
@@ -96,18 +96,18 @@ class CravatPostAggregator (BasePostAggregator):
         return {"col1":""}
 
 
-    def get_percent(self, name, value):
-        sql_get_percent = f"SELECT 'min', percent, max(value) FROM percentiles, prs WHERE percentiles.prs_id = prs.id AND prs.name = '{name}' AND value <= {value} UNION " \
+    def get_percent(self, name:str, value:float) -> float:
+        sql_get_percent:str = f"SELECT 'min', percent, max(value) FROM percentiles, prs WHERE percentiles.prs_id = prs.id AND prs.name = '{name}' AND value <= {value} UNION " \
                         f"SELECT 'max', percent, min(value) FROM percentiles, prs WHERE percentiles.prs_id = prs.id AND prs.name = '{name}' AND value >= {value}"
         self.prscursor.execute(sql_get_percent)
-        rows = self.prscursor.fetchall()
+        rows:tuple = self.prscursor.fetchall()
         for row in rows:
             if row[0] == 'min':
-                min_percent = row[1]
-                min_value = row[2]
+                min_percent:float = row[1]
+                min_value:float = row[2]
             if row[0] == 'max':
-                max_percent = row[1]
-                max_value = row[2]
+                max_percent:float = row[1]
+                max_value:float = row[2]
 
         if min_value is None:
             return max_percent
@@ -122,14 +122,14 @@ class CravatPostAggregator (BasePostAggregator):
 
 
     def postprocess(self):
-        sql = """ INSERT INTO prs (name, sum, avg, count, title, total, percent, fraction, invers) VALUES (?,?,?,?,?,?,?,?,?);"""
+        sql:str = """ INSERT INTO prs (name, sum, avg, count, title, total, percent, fraction, invers) VALUES (?,?,?,?,?,?,?,?,?);"""
         for name in self.prs_names:
-            avg = 0
+            avg:float = 0
             if self.prs[name][COUNT] > 0:
                 avg = self.prs[name][SUM] / (self.prs[name][COUNT] * 2)
-            percent = self.get_percent(name, self.prs[name][SUM])
+            percent:float = self.get_percent(name, self.prs[name][SUM])
             if type(percent) is not float:
                 percent = 0.01
-            task = (name, self.prs[name][SUM], avg, self.prs[name][COUNT], self.prs[name][TITLE], self.prs[name][TOTAL], int(percent * 100),
+            task:tuple = (name, self.prs[name][SUM], avg, self.prs[name][COUNT], self.prs[name][TITLE], self.prs[name][TOTAL], int(percent * 100),
                     percent, self.prs[name][INVERS])
             self.longevity_cursor.execute(sql, task)
