@@ -2,6 +2,8 @@ from oakvar import BasePostAggregator
 import sqlite3
 from sqlite3 import Error
 from pathlib import Path
+import polars as pl
+import urllib
 
 SUM = "sum"
 TOTAL = "total"
@@ -21,9 +23,9 @@ class CravatPostAggregator (BasePostAggregator):
 
 
     def setup (self):
-        sql_file:str = str(Path(__file__).parent) + "/data/prs.sqlite"
-        if Path(sql_file).exists():
-            self.prsconn:sqlite3.Connection = sqlite3.connect(sql_file)
+        self.sql_file:str = str(Path(__file__).parent) + "/data/prs.sqlite"
+        if Path(self.sql_file).exists():
+            self.prsconn:sqlite3.Connection = sqlite3.connect(self.sql_file)
             self.prscursor:sqlite3.Cursor = self.prsconn.cursor()
             self.prscursor.execute(self.sql_get_prs)
             rows:tuple = self.prscursor.fetchall()
@@ -44,56 +46,101 @@ class CravatPostAggregator (BasePostAggregator):
                     invers text
                     )"""
         self.result_path:Path = Path(self.output_dir, self.run_name + "_longevity.sqlite")
-        self.longevity_conn:sqlite3.Connection = sqlite3.connect(self.result_path)
-        self.longevity_cursor:sqlite3.Cursor = self.longevity_conn.cursor()
-        self.longevity_cursor.execute(sql_create)
-        self.longevity_conn.commit()
-        self.longevity_cursor.execute("DELETE FROM prs;")
+        self.result_conn:sqlite3.Connection = sqlite3.connect(self.result_path)
+        self.result_cursor:sqlite3.Cursor = self.result_conn.cursor()
+        self.result_cursor.execute(sql_create)
+        self.result_conn.commit()
+        self.result_cursor.execute("DELETE FROM prs;")
+
+
+    def get_prs_dataframe(self, name):
+        import platform
+        sql:str = f"SELECT pos, chrom, effect_allele, weight FROM prs, position, weights WHERE prs.name = '{name}' AND prs.id = weights.prsid AND weights.posid = position.id"
+        ol_pl = platform.platform()
+        if ol_pl.startswith("Windows"):
+            conn_url = f"sqlite://{urllib.parse.quote(self.sql_file)}"
+        else:
+            conn_url = f"sqlite://{self.sql_file}"
+        return pl.read_sql(sql, conn_url)
+
+
+    def calculate_prs(self, data_df, name):
+        prs_df:pl.DataFrame = self.get_prs_dataframe(name)
+        prs_df = prs_df.with_column((pl.col('chrom') + pl.col('pos')).alias("key"))
+        unite:pl.DataFrame = data_df.join(prs_df, left_on='key', right_on="key")
+        unite1 = unite.filter(pl.col("A") == pl.col("effect_allele"))
+        unite2 = unite.filter(pl.col("B") == pl.col("effect_allele"))
+        res1:pl.Series = unite1.select(pl.col("weight")).sum()
+        res2:pl.Series = unite2.select(pl.col("weight")).sum()
+
+        #TODO: negative join for ref homo zygot
+        # anti_unite = prs_df.join(data_df, left_on="rsid", right_on="dbsnp__rsid", how="anti")
+        # res3 = anti_unite.filter(pl.col("effect_allele") == pl.col("ref")).select(pl.col("weight")).sum() * 2
+        return float(res1.item()) + float(res2.item()), unite.shape[0]
+
+
+    def process_file(self):
+        data_df = self.get_df("variant", None, 0)
+        # print(data_df.select(['base__pos', 'base__pos_end', 'extra_vcf_info__pos', 'original_input__pos', 'original_input__pos_end', 'base__ref_base', 'base__alt_base']).filter(pl.col('base__pos') != pl.col('base__pos_end')).tail(100))
+        data_df = data_df.select(['base__pos', 'vcfinfo__zygosity', 'base__ref_base', 'base__alt_base', 'base__chrom'])
+        data_df = data_df.with_column(pl.col('vcfinfo__zygosity').fill_null("het"))
+        data_df = data_df.with_column((pl.col('base__chrom') + pl.col('base__pos')).alias("key"))
+
+        het_zygot = data_df.filter(pl.col('vcfinfo__zygosity') == 'het')
+        het_zygot = het_zygot.with_columns([pl.col('base__ref_base').alias("A"), pl.col('base__alt_base').alias("B")])
+
+        hom_zygot = data_df.filter(pl.col('vcfinfo__zygosity') == 'hom')
+        hom_zygot = hom_zygot.with_columns([pl.col('base__alt_base').alias("A"), pl.col('base__alt_base').alias("B")])
+
+        data_df = het_zygot.vstack(hom_zygot)
+        for name in self.prs_names:
+            sum, count = self.calculate_prs(data_df, name)
+            self.prs[name][SUM] = sum
+            self.prs[name][COUNT] = count
 
 
     def cleanup (self):
-        if self.longevity_cursor is not None:
-            self.longevity_cursor.close()
-        if self.longevity_conn is not None:
-            self.longevity_conn.commit()
-            self.longevity_conn.close()
+        if self.result_cursor is not None:
+            self.result_cursor.close()
+        if self.result_conn is not None:
+            self.result_conn.commit()
+            self.result_conn.close()
         if self.prscursor is not None:
             self.prscursor.close()
         if self.prsconn is not None:
             self.prsconn.close()
 
         
-    def annotate (self, input_data):
-        rsid:str = str(input_data['dbsnp__rsid'])
-        if rsid == '':
-            return
-
-        if not rsid.startswith("rs"):
-            rsid = 'rs' + rsid
-        alt:str = input_data['base__alt_base']
-        ref:str = input_data['base__ref_base']
-        chrom:str = input_data['base__chrom']
-
-        query:str = f"SELECT prs.name, weights.weight, position.effect_allele FROM position, prs, weights WHERE chrom = '{chrom}'" \
-                f" AND rsid = '{rsid}' AND weights.posid = position.id AND weights.prsid = prs.id"
-
-        self.prscursor.execute(query)
-        rows:tuple = self.prscursor.fetchall()
-
-        if len(rows) == 0:
-            return
-
-        zygot:str = input_data['vcfinfo__zygosity']
-        for name, weight, allele in rows:
-            if not (allele == alt or (allele == ref and zygot == 'het')):
-                continue
-            weight:float = float(weight)
-            if allele == alt and zygot == 'hom':
-                weight = 2 * weight
-
-            self.prs[name][SUM] += weight
-            self.prs[name][COUNT] += 1
-        return {"col1":""}
+    # def annotate (self, input_data):
+    #     rsid:str = str(input_data['dbsnp__rsid'])
+    #     if rsid == '':
+    #         return
+    #
+    #     if not rsid.startswith("rs"):
+    #         rsid = 'rs' + rsid
+    #     alt:str = input_data['base__alt_base']
+    #     ref:str = input_data['base__ref_base']
+    #     chrom:str = input_data['base__chrom']
+    #
+    #     query:str = f"SELECT prs.name, weights.weight, position.effect_allele FROM position, prs, weights WHERE chrom = '{chrom}'" \
+    #             f" AND rsid = '{rsid}' AND weights.posid = position.id AND weights.prsid = prs.id"
+    #
+    #     self.prscursor.execute(query)
+    #     rows:tuple = self.prscursor.fetchall()
+    #
+    #     if len(rows) == 0:
+    #         return
+    #
+    #     zygot:str = input_data['vcfinfo__zygosity']
+    #     for name, weight, allele in rows:
+    #         if not (allele == alt or (allele == ref and zygot == 'het')):
+    #             continue
+    #         weight:float = float(weight)
+    #         if allele == alt and zygot == 'hom':
+    #             weight = 2 * weight
+    #
+    #         self.prs[name][SUM] += weight
+    #         self.prs[name][COUNT] += 1
 
 
     def get_percent(self, name:str, value:float) -> float:
@@ -132,4 +179,4 @@ class CravatPostAggregator (BasePostAggregator):
                 percent = 0.01
             task:tuple = (name, self.prs[name][SUM], avg, self.prs[name][COUNT], self.prs[name][TITLE], self.prs[name][TOTAL], int(percent * 100),
                     percent, self.prs[name][INVERS])
-            self.longevity_cursor.execute(sql, task)
+            self.result_cursor.execute(sql, task)
