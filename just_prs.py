@@ -80,8 +80,8 @@ class CravatPostAggregator (BasePostAggregator):
 
 
     def process_file(self):
+        self._close_db_connection()
         data_df = self.get_df("variant", None, 0)
-        # print(data_df.select(['base__pos', 'base__pos_end', 'extra_vcf_info__pos', 'original_input__pos', 'original_input__pos_end', 'base__ref_base', 'base__alt_base']).filter(pl.col('base__pos') != pl.col('base__pos_end')).tail(100))
         data_df = data_df.select(['base__pos', 'vcfinfo__zygosity', 'base__ref_base', 'base__alt_base', 'base__chrom'])
         data_df = data_df.with_column(pl.col('vcfinfo__zygosity').fill_null("het"))
         data_df = data_df.with_column((pl.col('base__chrom') + pl.col('base__pos')).alias("key"))
@@ -97,6 +97,7 @@ class CravatPostAggregator (BasePostAggregator):
             sum, count = self.calculate_prs(data_df, name)
             self.prs[name][SUM] = sum
             self.prs[name][COUNT] = count
+        self._open_db_connection()
 
 
     def cleanup (self):
