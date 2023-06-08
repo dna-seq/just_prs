@@ -66,7 +66,7 @@ class CravatPostAggregator (BasePostAggregator):
 
     def calculate_prs(self, data_df, name):
         prs_df:pl.DataFrame = self.get_prs_dataframe(name)
-        prs_df = prs_df.with_column((pl.col('chrom') + pl.col('pos')).alias("key"))
+        prs_df = prs_df.with_column((pl.col('chrom') + pl.col('pos').cast(pl.datatypes.Utf8)).alias("key"))
         unite:pl.DataFrame = data_df.join(prs_df, left_on='key', right_on="key")
         unite1 = unite.filter(pl.col("A") == pl.col("effect_allele"))
         unite2 = unite.filter(pl.col("B") == pl.col("effect_allele"))
@@ -84,7 +84,7 @@ class CravatPostAggregator (BasePostAggregator):
         data_df = self.get_df("variant", None, 0)
         data_df = data_df.select(['base__pos', 'vcfinfo__zygosity', 'base__ref_base', 'base__alt_base', 'base__chrom'])
         data_df = data_df.with_column(pl.col('vcfinfo__zygosity').fill_null("het"))
-        data_df = data_df.with_column((pl.col('base__chrom') + pl.col('base__pos')).alias("key"))
+        data_df = data_df.with_column((pl.col('base__chrom') + pl.col('base__pos').cast(pl.datatypes.Utf8)).alias("key"))
 
         het_zygot = data_df.filter(pl.col('vcfinfo__zygosity') == 'het')
         het_zygot = het_zygot.with_columns([pl.col('base__ref_base').alias("A"), pl.col('base__alt_base').alias("B")])
