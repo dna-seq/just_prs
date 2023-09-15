@@ -1,6 +1,6 @@
 title: Prs postagregator
-version: 0.1.0
-data_version: 0.1.0
+version: 0.1.1
+data_version: 0.1.1
 requires_opencravat: '>=1.8.1'
 type: postaggregator
 name: just_prs
@@ -35,3 +35,4 @@ developer:
   citation: ""
 release_note:
   0.1.0: initial commit
+  0.1.1: updated database, added new prs
