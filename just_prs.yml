@@ -1,5 +1,5 @@
 title: Prs postagregator
-version: 0.1.1
+version: 0.1.2
 data_version: 0.1.1
 requires_opencravat: '>=1.8.1'
 type: postaggregator
@@ -16,6 +16,8 @@ input_columns:
   - base__ref_base
   - base__chrom
   - vcfinfo__zygosity
+pypi_dependency:
+  - polars>=0.19.0
 tags:
 - prs
 - longevity
@@ -36,3 +38,4 @@ developer:
 release_note:
   0.1.0: initial commit
   0.1.1: updated database, added new prs
+  0.1.2: updated dependencies and changed polars code according to its new version
