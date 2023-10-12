@@ -55,7 +55,7 @@ class CravatPostAggregator (BasePostAggregator):
 
     def get_prs_dataframe(self, name: str) -> pl.DataFrame:
         import platform
-        sql:str = f"SELECT pos, chrom, effect_allele, weight FROM prs, position, weights WHERE prs.name = '{name}' AND prs.id = weights.prsid AND weights.posid = position.id"
+        sql:str = f"SELECT pos, chrom, effect_allele, weight FROM prs, weights WHERE prs.name = '{name}' AND prs.id = weights.prsid"
         ol_pl = platform.platform()
         if ol_pl.startswith("Windows"):
             conn_url = f"sqlite://{urllib.parse.quote(self.sql_file)}"
@@ -64,12 +64,20 @@ class CravatPostAggregator (BasePostAggregator):
         return pl.read_database(sql, conn_url)
 
 
+    def save_debug_info(self, name, df1:pl.DataFrame, df2:pl.DataFrame):
+        df = df1.join(df2, how="outer", on="key")
+        df = df.select(['dbsnp__rsid', 'base__chrom', 'base__pos', "effect_allele", 'base__ref_base', 'base__alt_base', "weight"])
+        df = df.sort(by='dbsnp__rsid')
+        df.write_csv(Path(self.output_dir, "prs_debug_"+name+".tsv"), separator="\t")
+
+
     def calculate_prs(self, data_df: pl.DataFrame, name: str) -> tuple:
         prs_df:pl.DataFrame = self.get_prs_dataframe(name)
         prs_df = prs_df.with_columns((pl.col('chrom') + pl.col('pos').cast(pl.datatypes.Utf8)).alias("key"))
         unite:pl.DataFrame = data_df.join(prs_df, left_on='key', right_on="key")
         unite1 = unite.filter(pl.col("A") == pl.col("effect_allele"))
         unite2 = unite.filter(pl.col("B") == pl.col("effect_allele"))
+        self.save_debug_info(name, unite1, unite2)
         res1:pl.Series = unite1.select(pl.col("weight")).sum()
         res2:pl.Series = unite2.select(pl.col("weight")).sum()
 
@@ -80,9 +88,9 @@ class CravatPostAggregator (BasePostAggregator):
 
 
     def process_file(self) -> None:
-        self._close_db_connection()
+        # self._close_db_connection()
         data_df = self.get_df("variant", None, 0)
-        data_df = data_df.select(['base__pos', 'vcfinfo__zygosity', 'base__ref_base', 'base__alt_base', 'base__chrom'])
+        data_df = data_df.select(['base__pos', 'vcfinfo__zygosity', 'base__ref_base', 'base__alt_base', 'base__chrom', 'dbsnp__rsid'])
         data_df = data_df.with_columns(pl.col('vcfinfo__zygosity').fill_null("het"))
         data_df = data_df.with_columns((pl.col('base__chrom') + pl.col('base__pos').cast(pl.datatypes.Utf8)).alias("key"))
 
@@ -97,7 +105,7 @@ class CravatPostAggregator (BasePostAggregator):
             sum, count = self.calculate_prs(data_df, name)
             self.prs[name][SUM] = sum
             self.prs[name][COUNT] = count
-        self._open_db_connection()
+        # self._open_db_connection()
 
 
     def cleanup(self) -> None:
