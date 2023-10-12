@@ -1,6 +1,6 @@
 title: Prs postagregator
-version: 0.1.2
-data_version: 0.1.1
+version: 0.1.3
+data_version: 0.1.2
 requires_opencravat: '>=1.8.1'
 type: postaggregator
 name: just_prs
@@ -39,3 +39,4 @@ release_note:
   0.1.0: initial commit
   0.1.1: updated database, added new prs
   0.1.2: updated dependencies and changed polars code according to its new version
+  0.1.3: added new prs, changes of the code for new oakvar version
