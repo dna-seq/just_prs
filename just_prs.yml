@@ -30,10 +30,10 @@ output_columns:
   hidden: true
   desc: dummy column
 developer:
-  name: "Alex Karmazin"
-  organization: "Just-DNA_seq"
-  email: "karmazzinalex@gmail.com"
-  website: "https://github.com/dna-seq/opencravat-longevity"
+  name: Just-DNA-Seq
+  organization: Just-DNA-Seq
+  email: "just.dna.seq@gmail.com"
+  website: "https://dna-seq.github.io/"
   citation: ""
 release_note:
   0.1.0: initial commit
